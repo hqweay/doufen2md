@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Output / build artifacts
+epub/
+cache/
+日记/
+*.xlsx
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Env / local config
+.env
+.env.local
+
+# Misc
+*.tmp
+*.log

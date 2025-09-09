@@ -1,100 +1,53 @@
 
-const xlsx = require('xlsx');
-const fs = require('fs');
-const path = require('path');
-const cheerio = require('cheerio');
+const { runXlsxToMd } = require('./xlsx_to_md');
+const { runMdToEpub } = require('./md_to_epub');
 
-// 读取Excel文件
-function readWorkbook(filename = '豆伴(64306053).xlsx') {
-    const workbook = xlsx.readFile(filename);
-    return workbook;
+function printHelp() {
+    console.log('用法:');
+    console.log('  node index.js xlsx-to-md --xlsx <xlsxFile> --sheet <sheetName> --out <mdDir>');
+    console.log('  node index.js md-to-epub --md-root <mdDir> --title <bookTitle> --author <author> --out <epubDir>');
 }
 
-function readSheet(workbook, sheetName = '日记') {
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet);
-    return data;
+function getArg(flag, defaultValue) {
+    const idx = process.argv.indexOf(flag);
+    if (idx !== -1 && idx + 1 < process.argv.length) {
+        return process.argv[idx + 1];
+    }
+    return defaultValue;
 }
 
-// 解析HTML内容
-function parseHtml(html) {
-    const $ = cheerio.load(html);
-    // 保留基本格式
-    $('br').replaceWith('\n');
-    $('p').append('\n\n');
-    $('div').append('\n\n');
-    
-    // 处理标题
-    $('h1,h2,h3,h4,h5,h6').each((i, elem) => {
-        const level = elem.name[1];
-        $(elem).before('#'.repeat(level) + ' ');
-        $(elem).append('\n\n');
-    });
-
-    // 处理列表
-    $('ul,ol').append('\n');
-    $('li').prepend('- ').append('\n');
-
-    // 处理引用
-    $('blockquote').prepend('> ').append('\n\n');
-
-    // 处理加粗和斜体
-    $('strong,b').each((i, elem) => {
-        $(elem).before('**').after('**');
-    });
-    $('em,i').each((i, elem) => {
-        $(elem).before('*').after('*');
-    });
-
-    return $.text().trim();
-}
-
-// 创建markdown文件
-function createMarkdown(title, link, createTime, content, folder = '日记') {
-    // 创建文件夹
-    if (!fs.existsSync(folder)) {
-        fs.mkdirSync(folder);
+async function main() {
+    const cmd = process.argv[2];
+    if (!cmd || cmd === '-h' || cmd === '--help') {
+        printHelp();
+        return;
     }
 
-    // 处理文件名中的非法字符
-    const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_');
-    const filePath = path.join(folder, `${safeTitle}.md`);
-    
-    // 写入内容
-    const markdown = `---\nurl: ${link}\ncreateTime: ${createTime}\n---\n\n${content}`;
-    fs.writeFileSync(filePath, markdown, 'utf8');
+    if (cmd === 'xlsx-to-md') {
+        const xlsxFile = getArg('--xlsx', '豆伴(38065370).xlsx');
+        const sheet = getArg('--sheet', '日记');
+        const outDir = getArg('--out', sheet);
+        await runXlsxToMd({ xlsxFile, sheet, outDir });
+        console.log(`XLSX 已导出到 Markdown：${outDir}`);
+        return;
+    }
+
+    if (cmd === 'md-to-epub') {
+        const mdRoot = getArg('--md-root', '日记');
+        const title = getArg('--title', '梦开始的地方');
+        const author = getArg('--author', '黄梦子');
+        const outputDir = getArg('--out', 'epub');
+        const out = await runMdToEpub({ mdRoot, title, author, outputDir });
+        console.log(`EPUB 生成：${out}`);
+        return;
+    }
+
+    console.error('未知命令：', cmd);
+    printHelp();
+    process.exitCode = 1;
 }
 
-// 主函数
-function main() {
-    const workbook = readWorkbook();
-    
-    // 导出各类内容
-    const sheetTypes = ['日记', '影评', '书评'];
-    
-    sheetTypes.forEach(type => {
-        const data = readSheet(workbook, type);
-        data.forEach(row => {
-            const title = row['标题'];
-            const link = row["链接"];
-            const createTime = row["创建时间"];
-            const content = parseHtml(row['内容']);
-            
-            if (type === '书评' || type === '影评') {
-                const subject = row['评论对象'];
-                createMarkdown(
-                  `${subject}——${title}`,
-                  link,
-                  createTime,
-                  content,
-                  type
-                );
-            } else {
-                createMarkdown(title, link, createTime, content, type);
-            }
-        });
-        console.log(`${type}导出完成！`);
-    });
-}
-
-main();
+main().catch(err => {
+    console.error('运行失败：', err);
+    process.exitCode = 1;
+});
